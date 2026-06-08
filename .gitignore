@@ -1,0 +1,26 @@
+# Build outputs
+node_modules
+dist
+out
+build
+
+# Electron builder cache
+.eslintcache
+electron-builder-cache
+
+# User data / app outputs
+data/
+outputs/
+
+# Environment
+.env
+.env.*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode
+.idea
+*.swp

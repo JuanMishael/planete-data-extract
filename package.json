@@ -1,0 +1,49 @@
+{
+  "name": "planet-data-fetcher",
+  "version": "1.0.0",
+  "description": "PlanetExtract — SkySat archive finder",
+  "main": "./out/main/index.js",
+  "author": "PDR",
+  "scripts": {
+    "format": "prettier --write .",
+    "lint": "eslint --cache .",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
+    "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "start": "electron-vite preview",
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "build:win": "npm run build && electron-builder --win",
+    "build:mac": "electron-vite build && electron-builder --mac"
+  },
+  "dependencies": {
+    "@electron-toolkit/preload": "^3.0.2",
+    "@electron-toolkit/utils": "^4.0.0",
+    "@tailwindcss/vite": "^4.1.18",
+    "archiver": "^7.0.1",
+    "axios": "^1.7.0",
+    "tailwindcss": "^4.1.18",
+    "exceljs": "^4.4.0",
+    "zustand": "^5.0.11"
+  },
+  "devDependencies": {
+    "@electron-toolkit/eslint-config-prettier": "^3.0.0",
+    "@electron-toolkit/eslint-config-ts": "^3.1.0",
+    "@electron-toolkit/tsconfig": "^2.0.0",
+    "@types/archiver": "^6.0.2",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.1.1",
+    "daisyui": "^5.5.14",
+    "electron": "^39.0.0",
+    "electron-builder": "^26.0.0",
+    "electron-vite": "^3.0.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5.0.0",
+    "vite": "^6.3.0"
+  }
+}
