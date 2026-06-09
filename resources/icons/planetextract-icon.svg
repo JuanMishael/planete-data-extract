@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="1024" height="1024" shape-rendering="geometricPrecision">
+  <defs>
+    <radialGradient id="tileBg" cx="32%" cy="22%" r="100%">
+      <stop offset="0%" stop-color="#0d2e42"></stop>
+      <stop offset="60%" stop-color="#0a2433"></stop>
+      <stop offset="100%" stop-color="#06151f"></stop>
+    </radialGradient>
+    <radialGradient id="sphere" cx="36%" cy="32%" r="82%">
+      <stop offset="0%" stop-color="#3bb5a6"></stop>
+      <stop offset="42%" stop-color="#1f78a6"></stop>
+      <stop offset="82%" stop-color="#13506e"></stop>
+      <stop offset="100%" stop-color="#0e3e57"></stop>
+    </radialGradient>
+    <radialGradient id="sheen" cx="34%" cy="28%" r="44%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.4"></stop>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"></stop>
+    </radialGradient>
+    <linearGradient id="sat" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#e4c277"></stop>
+      <stop offset="100%" stop-color="#cfa75e"></stop>
+    </linearGradient>
+    <clipPath id="frontHalf"><rect x="0" y="52" width="100" height="60"></rect></clipPath>
+    <clipPath id="tileClip"><rect x="2" y="2" width="96" height="96" rx="22.5"></rect></clipPath>
+    <pattern id="grid" width="8" height="8" patternUnits="userSpaceOnUse">
+      <path d="M8 0H0V8" fill="none" stroke="#f4f1ea" stroke-opacity="0.045" stroke-width="0.4"></path>
+    </pattern>
+  </defs>
+
+  
+  <rect x="2" y="2" width="96" height="96" rx="22.5" fill="url(#tileBg)"></rect>
+  <g clip-path="url(#tileClip)">
+    <rect x="2" y="2" width="96" height="96" fill="url(#grid)"></rect>
+  </g>
+
+  
+  <ellipse cx="50" cy="52" rx="42" ry="14" transform="rotate(-24 50 52)" fill="none" stroke="#2f9e8f" stroke-width="1.6" stroke-opacity="0.5"></ellipse>
+
+  
+  <circle cx="50" cy="52" r="27" fill="url(#sphere)"></circle>
+  <circle cx="50" cy="52" r="27" fill="url(#sheen)"></circle>
+  
+  <g fill="none" stroke="#eafcff" stroke-opacity="0.22" stroke-width="1">
+    <ellipse cx="50" cy="52" rx="11.3" ry="27"></ellipse>
+    <ellipse cx="50" cy="52" rx="22" ry="27"></ellipse>
+    <line x1="23" y1="52" x2="77" y2="52"></line>
+    <path d="M25 42 Q50 36 75 42"></path>
+    <path d="M25 62 Q50 68 75 62"></path>
+  </g>
+  <circle cx="50" cy="52" r="27" fill="none" stroke="#ffffff" stroke-opacity="0.16" stroke-width="1"></circle>
+
+  
+  <g clip-path="url(#frontHalf)">
+    <ellipse cx="50" cy="52" rx="42" ry="14" transform="rotate(-24 50 52)" fill="none" stroke="#3bb5a6" stroke-width="2.6"></ellipse>
+  </g>
+
+  
+  <g transform="rotate(45 35.8 71.6)">
+    <rect x="31.8" y="67.6" width="8" height="8" rx="1.4" fill="url(#sat)"></rect>
+  </g>
+  <rect x="33.7" y="69.5" width="4.2" height="4.2" rx="0.8" transform="rotate(45 35.8 71.6)" fill="#0a2433" fill-opacity="0.18"></rect>
+</svg>

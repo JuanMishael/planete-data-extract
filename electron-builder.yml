@@ -9,8 +9,18 @@ files:
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+extraResources:
+  - from: resources/icons
+    to: icons
+    filter:
+      - '**/*'
 win:
+  icon: resources/icons/planetextract.ico
   executableName: PlanetExtract
+mac:
+  icon: resources/icons/png/planetextract-1024.png
+linux:
+  icon: resources/icons/png
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}

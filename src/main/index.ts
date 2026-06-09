@@ -13,6 +13,10 @@ import { loadApiKey, saveApiKey, validateApiKey } from './ipc/settings'
 let mainWindow: BrowserWindow | null = null
 
 function createWindow() {
+  const iconPath = is.dev
+    ? join(__dirname, '../../resources/icons/png/planetextract-256.png')
+    : join(process.resourcesPath, 'icons/png/planetextract-256.png')
+
   mainWindow = new BrowserWindow({
     width: 1300,
     height: 840,
@@ -20,6 +24,7 @@ function createWindow() {
     minHeight: 700,
     show: false,
     autoHideMenuBar: true,
+    icon: iconPath,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
