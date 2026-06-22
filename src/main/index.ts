@@ -218,6 +218,13 @@ app.whenReady().then(() => {
     return result.filePath
   })
 
+  ipcMain.handle('batch:open-summary', async (_, outputDir: string) => {
+    const summaryPath = path.join(outputDir, 'output', 'summary.json')
+    if (!fs.existsSync(summaryPath)) return false
+    await shell.openPath(summaryPath)
+    return true
+  })
+
   ipcMain.handle('batch:download', async (_, outputDir: string) => {
     const result = await dialog.showSaveDialog(mainWindow!, {
       title: 'Save results as ZIP',

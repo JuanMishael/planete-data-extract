@@ -140,14 +140,23 @@ export default function RightPanel() {
         )}
       </div>
 
-      {/* Download */}
-      <button
-        className="btn btn-outline btn-sm self-start"
-        onClick={onDownload}
-        disabled={!results?.outputDir || downloading}
-      >
-        {downloading ? <><span className="loading loading-spinner loading-xs" /> Creating ZIP…</> : 'Download Results'}
-      </button>
+      {/* Actions */}
+      <div className="flex gap-2">
+        <button
+          className="btn btn-outline btn-sm"
+          onClick={onDownload}
+          disabled={!results?.outputDir || downloading}
+        >
+          {downloading ? <><span className="loading loading-spinner loading-xs" /> Creating ZIP…</> : 'Download Results'}
+        </button>
+        <button
+          className="btn btn-outline btn-sm"
+          onClick={() => results?.outputDir && window.planet.openSummary(results.outputDir)}
+          disabled={!results?.outputDir}
+        >
+          Open Summary
+        </button>
+      </div>
     </main>
   )
 }

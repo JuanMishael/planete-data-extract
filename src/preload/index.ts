@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('planet', {
   resumeBatch: () => ipcRenderer.invoke('batch:resume'),
   getStatus: () => ipcRenderer.invoke('batch:status'),
   saveGeojson: (outputDir: string, filename: string) => ipcRenderer.invoke('batch:save-geojson', outputDir, filename),
+  openSummary: (outputDir: string) => ipcRenderer.invoke('batch:open-summary', outputDir),
   download: (outputDir: string) => ipcRenderer.invoke('batch:download', outputDir),
 
   // Events

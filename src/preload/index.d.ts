@@ -18,6 +18,7 @@ declare global {
       resumeBatch: () => Promise<void>
       getStatus: () => Promise<object>
       saveGeojson: (outputDir: string, filename: string) => Promise<string | null>
+      openSummary: (outputDir: string) => Promise<boolean>
       download: (outputDir: string) => Promise<string | null>
       onProgress: (cb: (status: BatchProgress) => void) => void
       onLog: (cb: (entry: LogEntry) => void) => void

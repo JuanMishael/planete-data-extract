@@ -366,6 +366,39 @@ function _writeGeoJSON(filePath: string, features: object[]) {
   fs.writeFileSync(filePath, JSON.stringify({ type: 'FeatureCollection', features }, null, 2))
 }
 
+function _computeStats(features: any[]) {
+  if (!features.length) {
+    return { count: 0, avg_cloud_cover_pct: null, cloud_distribution: {}, by_region: {}, by_satellite: {} }
+  }
+  const cloudLabels = ['0-5%', '5-10%', '10-15%', '15-20%', '20-25%', '25-30%', '>30%']
+  const cloudDist: Record<string, number> = Object.fromEntries(cloudLabels.map((l) => [l, 0]))
+  const byRegion: Record<string, number> = {}
+  const bySatellite: Record<string, number> = {}
+  let cloudSum = 0
+
+  for (const f of features) {
+    const p = f.properties ?? {}
+    const cc = (p.cloud_cover ?? 0) * 100
+    cloudSum += cc
+    cloudDist[cloudLabels[Math.min(Math.floor(cc / 5), 6)]]++
+    const r = p.region || 'Unknown'
+    const s = p.satellite_id || 'Unknown'
+    byRegion[r] = (byRegion[r] || 0) + 1
+    bySatellite[s] = (bySatellite[s] || 0) + 1
+  }
+
+  const sortDesc = (obj: Record<string, number>) =>
+    Object.fromEntries(Object.entries(obj).sort((a, b) => b[1] - a[1]))
+
+  return {
+    count: features.length,
+    avg_cloud_cover_pct: Math.round((cloudSum / features.length) * 10) / 10,
+    cloud_distribution: cloudDist,
+    by_region: sortDesc(byRegion),
+    by_satellite: sortDesc(bySatellite)
+  }
+}
+
 // ── Public entry ─────────────────────────────────────────────────────────────
 
 export async function runBatch(geojson: any, opts: BatchOptions, apiKey: string): Promise<object> {
@@ -405,6 +438,71 @@ export async function runBatch(geojson: any, opts: BatchOptions, apiKey: string)
   _status.running = false
   _status.finishedAt = new Date()
   _emit()
+
+  // ── Write summary.json ──────────────────────────────────────────────────────
+  const elapsedMs = _status.finishedAt!.getTime() - _status.startedAt!.getTime()
+  const summary =
+    opts.mode === 'paired'
+      ? {
+          generated_at: _status.finishedAt!.toISOString(),
+          mode: 'paired',
+          elapsed: _formatDuration(elapsedMs),
+          cancelled: _status.cancelRequested,
+          options: {
+            max_cloud_cover_pct: opts.maxCloud,
+            start_buffer_months: opts.startBufferMonths,
+            completion_buffer_months: opts.completionBufferMonths
+          },
+          totals: {
+            input_features: features.length,
+            processed: _status.processed,
+            archive_hits: _status.archive,
+            tasking: _status.tasking,
+            invalid: _status.invalid,
+            errors: _status.failed
+          },
+          start_phase: {
+            archive: buckets.startArchive.length,
+            tasking: buckets.startTasking.length,
+            hit_rate_pct: features.length > 0
+              ? parseFloat(((buckets.startArchive.length / features.length) * 100).toFixed(1))
+              : 0,
+            archive_stats: _computeStats(buckets.startArchive)
+          },
+          completion_phase: {
+            archive: buckets.completionArchive.length,
+            tasking: buckets.completionTasking.length,
+            hit_rate_pct: features.length > 0
+              ? parseFloat(((buckets.completionArchive.length / features.length) * 100).toFixed(1))
+              : 0,
+            archive_stats: _computeStats(buckets.completionArchive)
+          }
+        }
+      : {
+          generated_at: _status.finishedAt!.toISOString(),
+          mode: 'standard',
+          elapsed: _formatDuration(elapsedMs),
+          cancelled: _status.cancelRequested,
+          options: {
+            max_cloud_cover_pct: opts.maxCloud,
+            completion_buffer_months: opts.completionBufferMonths,
+            global_date_range: { gte: opts.datetimeGte, lte: opts.datetimeLte }
+          },
+          totals: {
+            input_features: features.length,
+            processed: _status.processed,
+            archive: buckets.archive.length,
+            tasking: buckets.tasking.length,
+            invalid: _status.invalid,
+            errors: _status.failed,
+            hit_rate_pct: features.length > 0
+              ? parseFloat(((buckets.archive.length / features.length) * 100).toFixed(1))
+              : 0
+          },
+          archive_stats: _computeStats(buckets.archive)
+        }
+
+  fs.writeFileSync(path.join(out, 'summary.json'), JSON.stringify(summary, null, 2))
   const wasCancelled = _status.cancelRequested
   _log(
     wasCancelled ? 'warn' : 'success',
