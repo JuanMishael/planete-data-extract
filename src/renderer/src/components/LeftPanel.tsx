@@ -4,6 +4,7 @@ import { usePlanetStore } from '@renderer/globalConfig'
 export default function LeftPanel() {
   const store = usePlanetStore()
   const [loading, setLoading] = useState(false)
+  const [loadingStep, setLoadingStep] = useState('')
   const [error, setError] = useState('')
   const [running, setRunning] = useState(false)
   const [dragging, setDragging] = useState(false)
@@ -21,17 +22,20 @@ export default function LeftPanel() {
   }
 
   const onPickFile = async () => {
-    setLoading(true); setError('')
+    setLoading(true); setError(''); setLoadingStep('Waiting for file…')
     try {
       const picked = await window.planet.pickFile()
       if (!picked) return
       if (picked.type === 'geojson') {
+        setLoadingStep('Parsing GeoJSON…')
         await loadGeojson(JSON.parse(picked.content!), picked.name)
       } else {
+        setLoadingStep('Reading sheets…')
         const sheets = await window.planet.xlsxSheets(picked.filePath)
         const sheet = sheets.includes('raw') ? 'raw' : sheets[0]
         store.setPendingXlsx({ filePath: picked.filePath, sheets })
         store.setSelectedSheet(sheet)
+        setLoadingStep('Converting to GeoJSON…')
         const conv = await window.planet.xlsxToGeojson(picked.filePath, sheet)
         await loadGeojson(conv.geojson, picked.name)
         if (conv.skipped) setError(`${conv.skipped} rows skipped (bad coords/dates)`)
@@ -39,37 +43,40 @@ export default function LeftPanel() {
     } catch (e: any) {
       setError(String(e.message ?? e))
     } finally {
-      setLoading(false)
+      setLoading(false); setLoadingStep('')
     }
   }
 
   const onSheetChange = async (sheet: string) => {
     if (!store.pendingXlsx) return
     store.setSelectedSheet(sheet)
-    setLoading(true)
+    setLoading(true); setLoadingStep('Converting to GeoJSON…')
     try {
       const conv = await window.planet.xlsxToGeojson(store.pendingXlsx.filePath, sheet)
       await loadGeojson(conv.geojson, store.pendingXlsx.name)
     } catch (e: any) {
       setError(String(e.message ?? e))
     } finally {
-      setLoading(false)
+      setLoading(false); setLoadingStep('')
     }
   }
 
   const handleDroppedFile = async (file: File) => {
     const filePath = window.planet.getFilePath(file)
     const name = file.name
-    setLoading(true); setError('')
+    setLoading(true); setError(''); setLoadingStep('Reading file…')
     try {
       if (name.match(/\.(geojson|json)$/i)) {
+        setLoadingStep('Parsing GeoJSON…')
         const text = await file.text()
         await loadGeojson(JSON.parse(text), name)
       } else if (name.match(/\.(xlsx|xls)$/i)) {
+        setLoadingStep('Reading sheets…')
         const sheets = await window.planet.xlsxSheets(filePath)
         const sheet = sheets.includes('raw') ? 'raw' : sheets[0]
         store.setPendingXlsx({ filePath, sheets })
         store.setSelectedSheet(sheet)
+        setLoadingStep('Converting to GeoJSON…')
         const conv = await window.planet.xlsxToGeojson(filePath, sheet)
         await loadGeojson(conv.geojson, name)
         if (conv.skipped) setError(`${conv.skipped} rows skipped (bad coords/dates)`)
@@ -79,7 +86,7 @@ export default function LeftPanel() {
     } catch (e: any) {
       setError(String(e.message ?? e))
     } finally {
-      setLoading(false)
+      setLoading(false); setLoadingStep('')
     }
   }
 
@@ -91,6 +98,7 @@ export default function LeftPanel() {
 
   const onRun = async () => {
     if (!store.geojson || running) return
+    store.clearLogs()
     setRunning(true)
     try {
       const result = await window.planet.runBatch(store.geojson, {
@@ -109,7 +117,19 @@ export default function LeftPanel() {
     }
   }
 
+  const onPauseResume = async () => {
+    const paused = store.progress?.paused
+    if (paused) await window.planet.resumeBatch()
+    else await window.planet.pauseBatch()
+  }
+
+  const onCancel = async () => {
+    await window.planet.cancelBatch()
+  }
+
   const canRun = !!store.geojson && !running
+  const isPaused = store.progress?.paused ?? false
+  const isInitializing = running && (!store.progress?.running || store.progress.processed === 0 && !store.progress.finished)
 
   return (
     <aside className="w-72 bg-base-100 border-r border-base-300 flex flex-col p-4 gap-3 overflow-y-auto">
@@ -126,7 +146,10 @@ export default function LeftPanel() {
           disabled={loading}
         >
           {loading
-            ? <span className="loading loading-spinner loading-md" />
+            ? <>
+                <span className="loading loading-spinner loading-md" />
+                <span className="text-xs opacity-60">{loadingStep}</span>
+              </>
             : <>
                 <svg xmlns="http://www.w3.org/2000/svg" className="w-8 h-8 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
@@ -230,14 +253,33 @@ export default function LeftPanel() {
         </div>
       </div>
 
-      <div className="mt-auto">
+      <div className="mt-auto flex flex-col gap-2">
         <button
           className="btn btn-primary w-full"
           onClick={onRun}
           disabled={!canRun}
         >
-          {running ? <><span className="loading loading-spinner loading-sm" /> Running…</> : 'Run Batch'}
+          {isInitializing
+            ? <><span className="loading loading-spinner loading-sm" /> Initializing…</>
+            : running
+              ? <><span className="loading loading-spinner loading-sm" /> Running…</>
+              : 'Run Batch'
+          }
         </button>
+
+        {running && (
+          <div className="flex gap-2">
+            <button
+              className={`btn btn-sm flex-1 ${isPaused ? 'btn-success' : 'btn-warning'}`}
+              onClick={onPauseResume}
+            >
+              {isPaused ? '▶ Resume' : '⏸ Pause'}
+            </button>
+            <button className="btn btn-sm btn-error flex-1" onClick={onCancel}>
+              ✕ Cancel
+            </button>
+          </div>
+        )}
       </div>
     </aside>
   )

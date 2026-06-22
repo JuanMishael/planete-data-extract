@@ -11,7 +11,15 @@ export interface BatchProgress {
   failed: number
   invalid: number
   elapsed: string
+  elapsedMs: number
   finished: boolean
+  paused: boolean
+}
+
+export interface LogEntry {
+  ts: string
+  level: 'info' | 'warn' | 'error' | 'success'
+  msg: string
 }
 
 export interface PlanetConfig {
@@ -38,6 +46,8 @@ export interface PlanetConfig {
     errored: object[]
     summary: { total: number; archive: number; tasking: number; invalid: number; errors: number; hitRate: string }
   } | null
+  // logs
+  logs: LogEntry[]
   // setters
   setGeojson: (g: object, name: string, count: number) => void
   setPendingXlsx: (v: { filePath: string; sheets: string[] } | null) => void
@@ -50,6 +60,8 @@ export interface PlanetConfig {
   setStartBuffer: (v: number) => void
   setProgress: (p: BatchProgress) => void
   setResults: (r: NonNullable<PlanetConfig['results']>) => void
+  addLog: (e: LogEntry) => void
+  clearLogs: () => void
   reset: () => void
 }
 
@@ -70,6 +82,7 @@ export const usePlanetStore = create<PlanetConfig>((set) => ({
   startBufferMonths: 1,
   progress: null,
   results: null,
+  logs: [],
 
   setGeojson: (g, name, count) => set({ geojson: g, fileName: name, featCount: count }),
   setPendingXlsx: (v) => set({ pendingXlsx: v }),
@@ -82,5 +95,7 @@ export const usePlanetStore = create<PlanetConfig>((set) => ({
   setStartBuffer: (v) => set({ startBufferMonths: v }),
   setProgress: (p) => set({ progress: p }),
   setResults: (r) => set({ results: r }),
-  reset: () => set({ geojson: null, fileName: '', featCount: 0, progress: null, results: null })
+  addLog: (e) => set((s) => ({ logs: [...s.logs.slice(-499), e] })),
+  clearLogs: () => set({ logs: [] }),
+  reset: () => set({ geojson: null, fileName: '', featCount: 0, progress: null, results: null, logs: [] })
 }))

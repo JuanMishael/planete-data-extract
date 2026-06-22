@@ -9,6 +9,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const setProgress = usePlanetStore((s) => s.setProgress)
   const setResults = usePlanetStore((s) => s.setResults)
+  const addLog = usePlanetStore((s) => s.addLog)
 
   useEffect(() => {
     const saved = localStorage.getItem('theme') || 'dark'
@@ -23,6 +24,9 @@ export default function App() {
           if (s.outputDir) setResults(s)
         })
       }
+    })
+    window.planet.onLog((entry) => {
+      addLog(entry as any)
     })
   }, [])
 

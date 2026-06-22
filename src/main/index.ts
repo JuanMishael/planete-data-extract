@@ -5,7 +5,8 @@ import * as fs from 'fs'
 import * as path from 'path'
 import * as ExcelJS from 'exceljs'
 import {
-  runBatch, cancelBatch, getBatchStatus, registerProgressCallback,
+  runBatch, cancelBatch, pauseBatch, resumeBatch,
+  getBatchStatus, registerProgressCallback, registerLogCallback,
   createZip, BatchOptions
 } from './ipc/planet'
 import { loadApiKey, saveApiKey, validateApiKey } from './ipc/settings'
@@ -33,6 +34,10 @@ function createWindow() {
 
   registerProgressCallback((status) => {
     mainWindow?.webContents.send('batch:progress', status)
+  })
+
+  registerLogCallback((entry) => {
+    mainWindow?.webContents.send('batch:log', entry)
   })
 
   mainWindow.on('ready-to-show', () => mainWindow?.show())
@@ -112,6 +117,18 @@ app.whenReady().then(() => {
     return { name: path.basename(filePath), filePath, sheets }
   })
 
+  function excelSerialToIso(val: unknown): string | null {
+    if (val == null) return null
+    if (val instanceof Date) return isNaN(val.getTime()) ? null : val.toISOString().slice(0, 10)
+    if (typeof val === 'number' && val >= 1 && val <= 2958465) {
+      const offset = val > 60 ? val - 2 : val - 1
+      const d = new Date(Date.UTC(1900, 0, 1) + offset * 86400000)
+      return d.toISOString().slice(0, 10)
+    }
+    const d = new Date(String(val))
+    return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10)
+  }
+
   ipcMain.handle('file:xlsx-to-geojson', async (_, filePath: string, sheetName: string) => {
     const wb = new ExcelJS.Workbook()
     await wb.xlsx.readFile(filePath)
@@ -163,8 +180,8 @@ app.whenReady().then(() => {
           implementing_office: String(row.implementing_office ?? ''),
           year: String(row.year ?? ''),
           status: String(row.status ?? ''),
-          start_date: row.actual_start_date ?? row.start_date ?? null,
-          completion_date: row.completion_date ?? null
+          start_date: excelSerialToIso(row.actual_start_date ?? row.start_date),
+          completion_date: excelSerialToIso(row.completion_date)
         }
       })
     }
@@ -183,6 +200,8 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('batch:cancel', () => cancelBatch())
+  ipcMain.handle('batch:pause', () => pauseBatch())
+  ipcMain.handle('batch:resume', () => resumeBatch())
   ipcMain.handle('batch:status', () => getBatchStatus())
 
   // ── Download ──────────────────────────────────────────────────────────────

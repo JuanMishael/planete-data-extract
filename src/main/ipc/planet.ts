@@ -21,6 +21,12 @@ export interface BatchOptions {
   startBufferMonths: number
 }
 
+export interface LogEntry {
+  ts: string
+  level: 'info' | 'warn' | 'error' | 'success'
+  msg: string
+}
+
 interface BatchStatus {
   running: boolean
   total: number
@@ -32,6 +38,7 @@ interface BatchStatus {
   startedAt: Date | null
   finishedAt: Date | null
   cancelRequested: boolean
+  pauseRequested: boolean
 }
 
 // ── Module state ─────────────────────────────────────────────────────────────
@@ -39,13 +46,18 @@ interface BatchStatus {
 let _status: BatchStatus = {
   running: false, total: 0, processed: 0,
   archive: 0, tasking: 0, failed: 0, invalid: 0,
-  startedAt: null, finishedAt: null, cancelRequested: false
+  startedAt: null, finishedAt: null, cancelRequested: false, pauseRequested: false
 }
 
 let _progressCallback: ((s: object) => void) | null = null
+let _logCallback: ((e: LogEntry) => void) | null = null
 
 export function registerProgressCallback(cb: (s: object) => void) {
   _progressCallback = cb
+}
+
+export function registerLogCallback(cb: (e: LogEntry) => void) {
+  _logCallback = cb
 }
 
 function _emit() {
@@ -61,8 +73,16 @@ function _emit() {
     failed: _status.failed,
     invalid: _status.invalid,
     elapsed: _formatDuration(elapsedMs),
-    finished: !!_status.finishedAt
+    elapsedMs,
+    finished: !!_status.finishedAt,
+    paused: _status.pauseRequested
   })
+}
+
+function _log(level: LogEntry['level'], msg: string) {
+  if (!_logCallback) return
+  const now = new Date()
+  _logCallback({ ts: now.toLocaleTimeString('en-US', { hour12: false }), level, msg })
 }
 
 export function getBatchStatus() {
@@ -73,6 +93,19 @@ export function getBatchStatus() {
 
 export function cancelBatch() {
   _status.cancelRequested = true
+  _log('warn', 'Cancel requested — stopping after current tasks finish')
+}
+
+export function pauseBatch() {
+  _status.pauseRequested = true
+  _emit()
+  _log('warn', 'Paused')
+}
+
+export function resumeBatch() {
+  _status.pauseRequested = false
+  _emit()
+  _log('info', 'Resumed')
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -87,16 +120,36 @@ function _formatDuration(ms: number): string {
   return `${sec}s`
 }
 
-function _dateWindowFrom(dateStr: string, months: number): [string, string] | null {
-  const d = new Date(dateStr)
+function _excelSerialToDate(serial: number): Date {
+  // Excel serial 1 = Jan 1 1900; Excel incorrectly treats 1900 as a leap year
+  const offset = serial > 60 ? serial - 2 : serial - 1
+  return new Date(Date.UTC(1900, 0, 1) + offset * 86400000)
+}
+
+function _dateWindowFrom(dateVal: unknown, months: number): [string, string] | null {
+  let d: Date
+  if (typeof dateVal === 'number') {
+    // Excel serial date (typical range 1–2958465 covers 1900–9999)
+    if (dateVal < 1 || dateVal > 2958465) return null
+    d = _excelSerialToDate(dateVal)
+  } else {
+    d = new Date(String(dateVal))
+  }
   if (isNaN(d.getTime())) return null
   const end = new Date(d)
   end.setMonth(end.getMonth() + months)
   return [d.toISOString(), end.toISOString()]
 }
 
+async function _waitWhilePaused() {
+  while (_status.pauseRequested && !_status.cancelRequested) {
+    await _sleep(200)
+  }
+}
+
 function _hasNullCoord(coords: unknown): boolean {
   if (coords === null || coords === undefined) return true
+  if (typeof coords === 'number') return isNaN(coords)
   if (Array.isArray(coords)) return coords.some(_hasNullCoord)
   return false
 }
@@ -147,7 +200,11 @@ async function _searchPlanet(
         continue
       }
       // Any other error — don't retry
-      console.error(`Planet API error (${status ?? 'network'}):`, err.message)
+      const detail = err.response?.data
+        ? JSON.stringify(err.response.data).slice(0, 200)
+        : err.message
+      console.error(`Planet API error (${status ?? 'network'}):`, detail)
+      _log('error', `API ${status ?? 'net'}: ${detail}`)
       return 'error'
     }
   }
@@ -178,10 +235,12 @@ async function _runStandard(features: any[], opts: BatchOptions, apiKey: string,
   let semIdx = 0
 
   const tasks = features.map((feat) => async () => {
+    await _waitWhilePaused()
     if (_status.cancelRequested) return
     const geom = feat.geometry
     const props = feat.properties ?? {}
     const coords = geom?.coordinates
+    const featId = props.contract_id || props.id || `#${_status.processed + 1}`
 
     if (!geom || !coords || _hasNullCoord(coords)) {
       buckets.invalid.push({ ...feat, properties: { ...props, classification: 'invalid' } })
@@ -192,7 +251,7 @@ async function _runStandard(features: any[], opts: BatchOptions, apiKey: string,
     let gte: string, lte: string
 
     if (completionDate) {
-      const w = _dateWindowFrom(String(completionDate), opts.completionBufferMonths)
+      const w = _dateWindowFrom(completionDate, opts.completionBufferMonths)
       if (w) { [gte, lte] = w }
       else { gte = opts.datetimeGte!; lte = opts.datetimeLte! }
     } else {
@@ -208,6 +267,7 @@ async function _runStandard(features: any[], opts: BatchOptions, apiKey: string,
 
     if (result === 'error') {
       buckets.errored.push({ ...feat, properties: { ...props, classification: 'error' } })
+      _log('error', `${featId}: API search failed (window ${gte.slice(0,10)} → ${lte.slice(0,10)})`)
       _status.failed++
     } else if (result === null) {
       buckets.tasking.push({ ...feat, properties: { ...props, classification: 'Tasking' } })
@@ -227,10 +287,12 @@ async function _runStandard(features: any[], opts: BatchOptions, apiKey: string,
 
 async function _runPaired(features: any[], opts: BatchOptions, apiKey: string, buckets: any) {
   const tasks = features.map((feat) => async () => {
+    await _waitWhilePaused()
     if (_status.cancelRequested) return
     const geom = feat.geometry
     const props = feat.properties ?? {}
     const coords = geom?.coordinates
+    const featId = props.contract_id || props.id || `#${_status.processed + 1}`
 
     if (!geom || !coords || _hasNullCoord(coords)) {
       buckets.invalid.push({ ...feat, properties: { ...props, classification: 'invalid' } })
@@ -245,8 +307,8 @@ async function _runPaired(features: any[], opts: BatchOptions, apiKey: string, b
       _status.invalid++; _status.processed++; _emit(); return
     }
 
-    const startWindow = _dateWindowFrom(String(startDate), opts.startBufferMonths)
-    const completionWindow = _dateWindowFrom(String(completionDate), opts.completionBufferMonths)
+    const startWindow = _dateWindowFrom(startDate, opts.startBufferMonths)
+    const completionWindow = _dateWindowFrom(completionDate, opts.completionBufferMonths)
 
     if (!startWindow || !completionWindow) {
       buckets.invalid.push({ ...feat, properties: { ...props, classification: 'invalid_bad_dates' } })
@@ -260,6 +322,7 @@ async function _runPaired(features: any[], opts: BatchOptions, apiKey: string, b
 
     if (startResult === 'error' || completionResult === 'error') {
       buckets.errored.push({ ...feat, properties: { ...props, classification: 'error' } })
+      _log('error', `${featId}: API search failed (paired mode)`)
       _status.failed++; _status.processed++; _emit(); return
     }
 
@@ -311,9 +374,10 @@ export async function runBatch(geojson: any, opts: BatchOptions, apiKey: string)
   _status = {
     running: true, total: features.length, processed: 0,
     archive: 0, tasking: 0, failed: 0, invalid: 0,
-    startedAt: new Date(), finishedAt: null, cancelRequested: false
+    startedAt: new Date(), finishedAt: null, cancelRequested: false, pauseRequested: false
   }
   _emit()
+  _log('info', `Batch started — ${features.length} features, mode: ${opts.mode}`)
 
   const buckets = {
     archive: [], tasking: [], errored: [], invalid: [],
@@ -341,6 +405,13 @@ export async function runBatch(geojson: any, opts: BatchOptions, apiKey: string)
   _status.running = false
   _status.finishedAt = new Date()
   _emit()
+  const wasCancelled = _status.cancelRequested
+  _log(
+    wasCancelled ? 'warn' : 'success',
+    wasCancelled
+      ? `Batch cancelled — ${_status.processed}/${_status.total} processed`
+      : `Batch complete — archive:${_status.archive} tasking:${_status.tasking} invalid:${_status.invalid} errors:${_status.failed}`
+  )
 
   const archiveFeatures = opts.mode === 'paired'
     ? [...buckets.startArchive, ...buckets.completionArchive]

@@ -14,10 +14,13 @@ declare global {
       xlsxToGeojson: (filePath: string, sheet: string) => Promise<{ geojson: object; converted: number; skipped: number }>
       runBatch: (geojson: object, opts: object) => Promise<{ mode: string; archive: object[]; outputDir: string }>
       cancelBatch: () => Promise<void>
+      pauseBatch: () => Promise<void>
+      resumeBatch: () => Promise<void>
       getStatus: () => Promise<object>
       saveGeojson: (outputDir: string, filename: string) => Promise<string | null>
       download: (outputDir: string) => Promise<string | null>
       onProgress: (cb: (status: BatchProgress) => void) => void
+      onLog: (cb: (entry: LogEntry) => void) => void
     }
   }
 
@@ -30,6 +33,14 @@ declare global {
     failed: number
     invalid: number
     elapsed: string
+    elapsedMs: number
     finished: boolean
+    paused: boolean
+  }
+
+  interface LogEntry {
+    ts: string
+    level: 'info' | 'warn' | 'error' | 'success'
+    msg: string
   }
 }

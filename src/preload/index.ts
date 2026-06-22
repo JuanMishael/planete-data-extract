@@ -18,11 +18,15 @@ contextBridge.exposeInMainWorld('planet', {
   // Batch
   runBatch: (geojson: object, opts: object) => ipcRenderer.invoke('batch:run', geojson, opts),
   cancelBatch: () => ipcRenderer.invoke('batch:cancel'),
+  pauseBatch: () => ipcRenderer.invoke('batch:pause'),
+  resumeBatch: () => ipcRenderer.invoke('batch:resume'),
   getStatus: () => ipcRenderer.invoke('batch:status'),
   saveGeojson: (outputDir: string, filename: string) => ipcRenderer.invoke('batch:save-geojson', outputDir, filename),
   download: (outputDir: string) => ipcRenderer.invoke('batch:download', outputDir),
 
   // Events
   onProgress: (cb: (status: object) => void) =>
-    ipcRenderer.on('batch:progress', (_, s) => cb(s))
+    ipcRenderer.on('batch:progress', (_, s) => cb(s)),
+  onLog: (cb: (entry: object) => void) =>
+    ipcRenderer.on('batch:log', (_, e) => cb(e))
 })
