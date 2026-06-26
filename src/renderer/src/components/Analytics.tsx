@@ -5,7 +5,6 @@ function PhaseSection({ features, label, color }: { features: any[], label: stri
 
   const clouds = features.map((f) => (f.properties?.cloud_cover ?? 0) * 100)
   const avgCloud = clouds.reduce((a, b) => a + b, 0) / clouds.length
-  const totalIn = features.length
 
   const buckets = Array(7).fill(0)
   clouds.forEach((c) => { buckets[Math.min(Math.floor(c / 5), 6)]++ })

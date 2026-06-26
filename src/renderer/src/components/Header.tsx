@@ -1,6 +1,4 @@
-interface Props { onSettings: () => void }
-
-export default function Header({ onSettings }: Props) {
+export default function Header({ onSettings }: { onSettings: () => void }) {
   return (
     <div className="navbar bg-base-100 border-b border-base-300 px-4 min-h-12">
       <div className="flex-1 flex items-center gap-2">

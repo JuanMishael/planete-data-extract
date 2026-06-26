@@ -21,6 +21,18 @@ export default function LeftPanel() {
     else store.setMode('standard')
   }
 
+  const loadXlsx = async (filePath: string, name: string) => {
+    setLoadingStep('Reading sheets…')
+    const sheets = await window.planet.xlsxSheets(filePath)
+    const sheet = sheets.includes('raw') ? 'raw' : sheets[0]
+    store.setPendingXlsx({ filePath, sheets })
+    store.setSelectedSheet(sheet)
+    setLoadingStep('Converting to GeoJSON…')
+    const conv = await window.planet.xlsxToGeojson(filePath, sheet)
+    await loadGeojson(conv.geojson, name)
+    if (conv.skipped) setError(`${conv.skipped} rows skipped (bad coords/dates)`)
+  }
+
   const onPickFile = async () => {
     setLoading(true); setError(''); setLoadingStep('Waiting for file…')
     try {
@@ -30,15 +42,7 @@ export default function LeftPanel() {
         setLoadingStep('Parsing GeoJSON…')
         await loadGeojson(JSON.parse(picked.content!), picked.name)
       } else {
-        setLoadingStep('Reading sheets…')
-        const sheets = await window.planet.xlsxSheets(picked.filePath)
-        const sheet = sheets.includes('raw') ? 'raw' : sheets[0]
-        store.setPendingXlsx({ filePath: picked.filePath, sheets })
-        store.setSelectedSheet(sheet)
-        setLoadingStep('Converting to GeoJSON…')
-        const conv = await window.planet.xlsxToGeojson(picked.filePath, sheet)
-        await loadGeojson(conv.geojson, picked.name)
-        if (conv.skipped) setError(`${conv.skipped} rows skipped (bad coords/dates)`)
+        await loadXlsx(picked.filePath, picked.name)
       }
     } catch (e: any) {
       setError(String(e.message ?? e))
@@ -53,7 +57,7 @@ export default function LeftPanel() {
     setLoading(true); setLoadingStep('Converting to GeoJSON…')
     try {
       const conv = await window.planet.xlsxToGeojson(store.pendingXlsx.filePath, sheet)
-      await loadGeojson(conv.geojson, store.pendingXlsx.name)
+      await loadGeojson(conv.geojson, store.fileName)
     } catch (e: any) {
       setError(String(e.message ?? e))
     } finally {
@@ -71,15 +75,7 @@ export default function LeftPanel() {
         const text = await file.text()
         await loadGeojson(JSON.parse(text), name)
       } else if (name.match(/\.(xlsx|xls)$/i)) {
-        setLoadingStep('Reading sheets…')
-        const sheets = await window.planet.xlsxSheets(filePath)
-        const sheet = sheets.includes('raw') ? 'raw' : sheets[0]
-        store.setPendingXlsx({ filePath, sheets })
-        store.setSelectedSheet(sheet)
-        setLoadingStep('Converting to GeoJSON…')
-        const conv = await window.planet.xlsxToGeojson(filePath, sheet)
-        await loadGeojson(conv.geojson, name)
-        if (conv.skipped) setError(`${conv.skipped} rows skipped (bad coords/dates)`)
+        await loadXlsx(filePath, name)
       } else {
         setError('Only XLSX or GeoJSON files are supported')
       }

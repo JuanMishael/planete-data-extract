@@ -9,7 +9,6 @@ declare global {
       getFilePath: (file: File) => string
       pickFile: () => Promise<{ type: 'geojson' | 'xlsx'; name: string; filePath: string; content: string | null } | null>
       pickGeojson: () => Promise<{ name: string; geojson: object } | null>
-      pickXlsx: () => Promise<{ name: string; filePath: string; sheets: string[] } | null>
       xlsxSheets: (filePath: string) => Promise<string[]>
       xlsxToGeojson: (filePath: string, sheet: string) => Promise<{ geojson: object; converted: number; skipped: number }>
       runBatch: (geojson: object, opts: object) => Promise<{ mode: string; archive: object[]; outputDir: string }>

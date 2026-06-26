@@ -27,7 +27,7 @@ export default function ResultsTable() {
     return <p className="text-sm opacity-50 italic">No results yet — run a batch to see archive hits.</p>
   }
 
-  const { summary, archive, invalid, errored, outputDir, mode } = results
+  const { summary, archive, outputDir, mode } = results
   const features = archive as any[]
   const paired = mode === 'paired'
 

@@ -10,7 +10,6 @@ contextBridge.exposeInMainWorld('planet', {
   getFilePath: (file: File) => webUtils.getPathForFile(file),
   pickFile: () => ipcRenderer.invoke('file:pick-any'),
   pickGeojson: () => ipcRenderer.invoke('file:pick-geojson'),
-  pickXlsx: () => ipcRenderer.invoke('file:pick-xlsx'),
   xlsxSheets: (filePath: string) => ipcRenderer.invoke('file:xlsx-sheets', filePath),
   xlsxToGeojson: (filePath: string, sheet: string) =>
     ipcRenderer.invoke('file:xlsx-to-geojson', filePath, sheet),

@@ -103,20 +103,6 @@ app.whenReady().then(() => {
     return wb.worksheets.map((ws) => ws.name)
   })
 
-  ipcMain.handle('file:pick-xlsx', async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
-      title: 'Select XLSX file',
-      filters: [{ name: 'Excel', extensions: ['xlsx', 'xls'] }],
-      properties: ['openFile']
-    })
-    if (result.canceled || !result.filePaths.length) return null
-    const filePath = result.filePaths[0]
-    const wb = new ExcelJS.Workbook()
-    await wb.xlsx.readFile(filePath)
-    const sheets = wb.worksheets.map((ws) => ws.name)
-    return { name: path.basename(filePath), filePath, sheets }
-  })
-
   function excelSerialToIso(val: unknown): string | null {
     if (val == null) return null
     if (val instanceof Date) return isNaN(val.getTime()) ? null : val.toISOString().slice(0, 10)

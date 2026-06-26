@@ -1,11 +1,10 @@
-import axios from 'axios'
 import * as fs from 'fs'
 import * as path from 'path'
 import * as archiver from 'archiver'
-import { app } from 'electron'
 
 const PLANET_BASE = 'https://api.planet.com/data/v1'
 const CONCURRENCY = 4
+const _basicAuth = (key: string) => `Basic ${Buffer.from(`${key}:`).toString('base64')}`
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -154,6 +153,18 @@ function _hasNullCoord(coords: unknown): boolean {
   return false
 }
 
+function _getValidGeom(feat: any, buckets: any): { geom: any; props: any; featId: string } | null {
+  const geom = feat.geometry
+  const props = feat.properties ?? {}
+  const featId = props.contract_id || props.id || `#${_status.processed + 1}`
+  if (!geom || !geom.coordinates || _hasNullCoord(geom.coordinates)) {
+    buckets.invalid.push({ ...feat, properties: { ...props, classification: 'invalid' } })
+    _status.invalid++; _status.processed++; _emit()
+    return null
+  }
+  return { geom, props, featId }
+}
+
 // ── Planet API search ────────────────────────────────────────────────────────
 
 const _sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -166,49 +177,52 @@ async function _searchPlanet(
   apiKey: string
 ): Promise<object | null | 'error'> {
   const MAX_RETRIES = 4
+  const body = JSON.stringify({
+    item_types: ['SkySatCollect'],
+    filter: {
+      type: 'AndFilter',
+      config: [
+        { type: 'GeometryFilter', field_name: 'geometry', config: geometry },
+        { type: 'DateRangeFilter', field_name: 'acquired', config: { gte, lte } },
+        { type: 'RangeFilter', field_name: 'cloud_cover', config: { lte: maxCloud / 100 } }
+      ]
+    }
+  })
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    let resp: Response
     try {
-      const resp = await axios.post(
-        `${PLANET_BASE}/quick-search`,
-        {
-          item_types: ['SkySatCollect'],
-          filter: {
-            type: 'AndFilter',
-            config: [
-              { type: 'GeometryFilter', field_name: 'geometry', config: geometry },
-              { type: 'DateRangeFilter', field_name: 'acquired', config: { gte, lte } },
-              { type: 'RangeFilter', field_name: 'cloud_cover', config: { lte: maxCloud / 100 } }
-            ]
-          }
-        },
-        { auth: { username: apiKey, password: '' }, timeout: 30000 }
-      )
-      const items: object[] = resp.data?.features ?? []
-      if (!items.length) return null
-      // Sort client-side — API sort param is ignored
-      items.sort((a: any, b: any) =>
-        (a.properties?.cloud_cover ?? 1) - (b.properties?.cloud_cover ?? 1)
-      )
-      return items[0]
+      resp = await fetch(`${PLANET_BASE}/quick-search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: _basicAuth(apiKey) },
+        body,
+        signal: AbortSignal.timeout(30000)
+      })
     } catch (err: any) {
-      const status = err.response?.status
-      if (status === 429) {
-        // Rate limited — back off and retry
-        const retryAfter = parseInt(err.response?.headers?.['retry-after'] ?? '0', 10)
-        const backoff = retryAfter > 0 ? retryAfter * 1000 : Math.pow(2, attempt + 1) * 1000
-        await _sleep(backoff)
-        continue
-      }
-      // Any other error — don't retry
-      const detail = err.response?.data
-        ? JSON.stringify(err.response.data).slice(0, 200)
-        : err.message
-      console.error(`Planet API error (${status ?? 'network'}):`, detail)
-      _log('error', `API ${status ?? 'net'}: ${detail}`)
+      console.error('Planet API network error:', err.message)
+      _log('error', `API net: ${err.message}`)
       return 'error'
     }
+    if (resp.status === 429) {
+      const retryAfter = parseInt(resp.headers.get('retry-after') ?? '0', 10)
+      const backoff = retryAfter > 0 ? retryAfter * 1000 : Math.pow(2, attempt + 1) * 1000
+      await _sleep(backoff)
+      continue
+    }
+    if (!resp.ok) {
+      const detail = await resp.text().then((t) => t.slice(0, 200)).catch(() => String(resp.status))
+      console.error(`Planet API error (${resp.status}):`, detail)
+      _log('error', `API ${resp.status}: ${detail}`)
+      return 'error'
+    }
+    const data = await resp.json()
+    const items: object[] = data?.features ?? []
+    if (!items.length) return null
+    // Sort client-side — API sort param is ignored
+    items.sort((a: any, b: any) =>
+      (a.properties?.cloud_cover ?? 1) - (b.properties?.cloud_cover ?? 1)
+    )
+    return items[0]
   }
-  // All retries exhausted (still rate limited)
   return 'error'
 }
 
@@ -231,21 +245,13 @@ function _archiveProps(srcProps: object, scene: any, window?: [string, string]):
 // ── Standard batch ───────────────────────────────────────────────────────────
 
 async function _runStandard(features: any[], opts: BatchOptions, apiKey: string, buckets: any) {
-  const sem = new Array(CONCURRENCY).fill(null)
-  let semIdx = 0
-
   const tasks = features.map((feat) => async () => {
     await _waitWhilePaused()
     if (_status.cancelRequested) return
-    const geom = feat.geometry
-    const props = feat.properties ?? {}
-    const coords = geom?.coordinates
-    const featId = props.contract_id || props.id || `#${_status.processed + 1}`
 
-    if (!geom || !coords || _hasNullCoord(coords)) {
-      buckets.invalid.push({ ...feat, properties: { ...props, classification: 'invalid' } })
-      _status.invalid++; _status.processed++; _emit(); return
-    }
+    const v = _getValidGeom(feat, buckets)
+    if (!v) return
+    const { geom, props, featId } = v
 
     const completionDate = props.completion_date
     let gte: string, lte: string
@@ -289,15 +295,10 @@ async function _runPaired(features: any[], opts: BatchOptions, apiKey: string, b
   const tasks = features.map((feat) => async () => {
     await _waitWhilePaused()
     if (_status.cancelRequested) return
-    const geom = feat.geometry
-    const props = feat.properties ?? {}
-    const coords = geom?.coordinates
-    const featId = props.contract_id || props.id || `#${_status.processed + 1}`
 
-    if (!geom || !coords || _hasNullCoord(coords)) {
-      buckets.invalid.push({ ...feat, properties: { ...props, classification: 'invalid' } })
-      _status.invalid++; _status.processed++; _emit(); return
-    }
+    const v = _getValidGeom(feat, buckets)
+    if (!v) return
+    const { geom, props, featId } = v
 
     const startDate = props.start_date
     const completionDate = props.completion_date

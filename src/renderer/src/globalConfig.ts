@@ -2,26 +2,6 @@ import { create } from 'zustand'
 
 export type BatchMode = 'standard' | 'paired'
 
-export interface BatchProgress {
-  running: boolean
-  total: number
-  processed: number
-  archive: number
-  tasking: number
-  failed: number
-  invalid: number
-  elapsed: string
-  elapsedMs: number
-  finished: boolean
-  paused: boolean
-}
-
-export interface LogEntry {
-  ts: string
-  level: 'info' | 'warn' | 'error' | 'success'
-  msg: string
-}
-
 export interface PlanetConfig {
   geojson: object | null
   fileName: string

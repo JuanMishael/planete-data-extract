@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react'
 
-interface Props { onClose: () => void }
-
-export default function SettingsModal({ onClose }: Props) {
+export default function SettingsModal({ onClose }: { onClose: () => void }) {
   const [key, setKey] = useState('')
   const [status, setStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
 
